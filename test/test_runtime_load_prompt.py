@@ -14,7 +14,7 @@ from app.shared.runtime.load_prompt import load_prompt
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     # 调用渲染方法，传入模板名称与对应的变量
-    # 注意：kwargs 的键名（rewritten_query）必须与 hyde_prompt.prompt 文件中的占位符完全一致
+    # 注意：kwargs 的键名 (rewritten_query) 必须与 hyde_prompt.prompt 文件中的占位符完全一致
     final_prompt = load_prompt(
         name="hyde_prompt",
         rewritten_query="参数1"

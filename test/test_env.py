@@ -2,7 +2,7 @@
 环境变量加载测试模块。
 
 该模块专门用于验证项目根目录下的 .env 文件是否被正确加载，
-以及对应的环境变量（如 APP_ENV）是否能被系统成功读取。
+以及对应的环境变量 (如 APP_ENV) 是否能被系统成功读取。
 """
 import os
 from dotenv import load_dotenv
