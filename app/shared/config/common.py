@@ -1,6 +1,5 @@
 """
 配置读取公共工具，统一处理 .env 加载与环境变量类型转换
-
 封装原生 os.getenv，提供类型安全的环境变量读取方法，解决原生读取永远返回字符串或 None 的问题
 """
 from __future__ import annotations

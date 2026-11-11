@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from app.shared.config.common import env_str
 
 
+# ---------------------------------------------------------------------------
+# 配置模型定义
+# ---------------------------------------------------------------------------
 @dataclass
 class MilvusConfig:
     """
@@ -23,6 +26,11 @@ class MilvusConfig:
     entity_name_collection: str
     item_name_collection: str
 
+
+# ---------------------------------------------------------------------------
+# 全局实例化
+# ---------------------------------------------------------------------------
+# 使用 common.py 全局环境变量工具封装简化代码
 milvus_config = MilvusConfig(
     milvus_url=env_str("MILVUS_URL"),
     chunks_collection=env_str("CHUNKS_COLLECTION"),
