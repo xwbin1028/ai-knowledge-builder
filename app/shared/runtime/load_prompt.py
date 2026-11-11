@@ -1,8 +1,8 @@
 """
 提示词加载与渲染工具模块。
 
-提供从项目资源目录加载文本提示词 (Prompt)，并动态渲染变量占位符的能力。
-支持通过传入关键字参数替换提示词模板中的 ``{变量名}``，便于业务侧复用统一模板。
+提供从项目资源目录加载文本提示词 Prompt 并动态渲染变量占位符的能力。
+支持通过传入关键字参数替换提示词模板中的 {变量名}，便于业务侧复用统一模板。
 """
 from app.shared.runtime.logger import logger, PROJECT_ROOT
 
@@ -17,9 +17,8 @@ def load_prompt(name: str, **kwargs) -> str:
     若传入了关键字参数，则使用 Python 的 str.format 机制替换模板中的占位符。
 
     Args:
-        name (str): 提示词文件名(不带 .prompt 后缀，如 "image_summary")。
+        name (str): 提示词文件名不带 .prompt 后缀，如 hyde_prompt。
         **kwargs: 需要渲染的变量键值对。键名必须与 .prompt 文件中的占位符完全一致。
-                  例如：root_folder="测试文件", image_content=("上文", "下文")。
 
     Returns:
         str: 渲染后的最终提示词字符串；若未传参，则返回原始文本。
@@ -27,7 +26,7 @@ def load_prompt(name: str, **kwargs) -> str:
     Raises:
         FileNotFoundError: 当指定的提示词文件不存在时抛出。
     """
-    # 1. 拼接提示词文件路径(基于项目根目录定位)
+    # 1. 拼接提示词文件路径基于项目根目录定位
     prompt_path = PROJECT_ROOT / 'app' / 'resources' / 'prompts' / f'{name}.prompt'
 
     # 2. 前置校验文件是否存在，避免读取时抛出不可读的底层 IO 错误

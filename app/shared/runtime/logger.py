@@ -29,7 +29,7 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # 环境配置加载
 # ---------------------------------------------------------------------------
-# 加载 .env 配置文件(默认不覆盖已存在的环境变量)
+# 加载 .env 配置文件默认不覆盖已存在的环境变量
 load_dotenv()
 
 # 读取 .env 配置项；缺失时回退到默认值，避免配置缺失导致启动失败
@@ -121,7 +121,7 @@ def fix_log_position(record):
         record (dict): loguru 传给 patcher 的日志记录字典，原地修改。
     """
     for frame in inspect.stack():
-        # 过滤 loguru 内部帧和本工具模块 (logger.py)自身帧，定位业务代码调用位置
+        # 过滤 loguru 内部帧和本工具模块 logger.py 自身帧，定位业务代码调用位置
         if ("_logger.py" in frame.filename or frame.function == "_log") or "logger.py" in frame.filename:
             continue
         # 更新日志字段为业务代码实际位置
@@ -162,7 +162,7 @@ def node_log(node_name: str):
 
     自动记录三类事件：
         - 节点开始：节点名 + 追踪 ID。
-        - 节点完成：节点名 + 追踪 ID + 耗时 (毫秒)。
+        - 节点完成：节点名 + 追踪 ID + 耗时毫秒。
         - 节点异常：节点名 + 追踪 ID + 完整堆栈，并原样抛出异常。
 
     被装饰函数契约：
@@ -186,7 +186,7 @@ def node_log(node_name: str):
             logger.info(f"[{node_name}] 节点开始，追踪ID={trace_id}")
             try:
                 result = func(state, *args, **kwargs)
-                # 计算节点耗时 (毫秒)，用于性能观测
+                # 计算节点耗时毫秒，用于性能观测
                 cost_ms = int((time.time() - start_ts) * 1000)
                 logger.info(f"[{node_name}] 节点完成，追踪ID={trace_id}，耗时={cost_ms}ms")
                 return result
@@ -220,7 +220,7 @@ def step_log(step_name: str):
             logger.info(f"[{step_name}] 步骤开始")
             try:
                 result = func(*args, **kwargs)
-                # 计算步骤耗时 (毫秒)，用于性能观测
+                # 计算步骤耗时毫秒，用于性能观测
                 cost_ms = int((time.time() - start_ts) * 1000)
                 logger.info(f"[{step_name}] 步骤完成，耗时={cost_ms}ms")
                 return result

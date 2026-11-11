@@ -1,6 +1,6 @@
 """
 LLM 配置模块。
-负责从环境变量中读取大语言模型(LLM)与视觉模型(VL)相关的配置参数，
+负责从环境变量中读取大语言模型 LLM 与视觉模型 VL 相关的配置参数，
 并将其封装为强类型的全局单例实例 lm_config，供业务代码开箱即用。
 """
 from dataclasses import dataclass
@@ -18,9 +18,9 @@ class LLMConfig:
     Attributes:
         base_url (str): API 请求的基础 URL。
         api_key (str): 鉴权所需的 API Key。
-        lv_model (str): 视觉语言模型(Vision-Language)的名称或标识。
+        lv_model (str): 视觉语言模型 Vision-Language 的名称或标识。
         llm_model (str): 纯文本大语言模型的名称或标识。
-        llm_temperature (float): 生成内容的随机性参数(0.0 ~ 1.0)
+        llm_temperature (float): 生成内容的随机性参数
     """
     base_url: str
     api_key: str
