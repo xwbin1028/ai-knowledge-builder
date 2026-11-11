@@ -1,19 +1,15 @@
 """
 全局日志组件功能测试模块。
 
-该模块专门用于验证从 app.shared.runtime.logger 导入的全局 logger
+该模块专门用于验证从 app.shared.runtime.logger
 是否按预期工作，包含控制台输出、文件写入、路径推导和异常堆栈捕获测试。
-
-使用说明：
-    在项目根目录下执行：
-    $ python test/logger_test.py
 """
 from app.shared.runtime.logger import logger, LOG_FILE_PATH
 
 # ---------------------------------------------------------------------------
 # 日志功能测试
 # ---------------------------------------------------------------------------
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 打印日志文件的实际落盘路径，便于验证路径推导是否正确
     print(f"日志文件输出路径：{LOG_FILE_PATH}")
 
@@ -36,3 +32,4 @@ if __name__ == '__main__':
         logger.info(f"【信息】业务计算结果：{result}")
     except Exception:
         logger.exception("【异常】捕获到业务异常，输出完整堆栈信息")
+        

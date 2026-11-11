@@ -3,10 +3,6 @@
 
 该模块专门用于验证项目根目录下的 .env 文件是否被正确加载，
 以及对应的环境变量（如 APP_ENV）是否能被系统成功读取。
-
-使用说明：
-    在项目根目录下执行：
-    $ python test/env_test.py
 """
 import os
 from dotenv import load_dotenv
@@ -19,7 +15,7 @@ from dotenv import load_dotenv
 # override=True 表示如果系统中已存在同名环境变量，则强制使用 .env 文件中的值覆盖
 load_dotenv(override=True)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 读取并打印当前的环境标识，验证 .env 是否成功加载
     app_env = os.environ.get("APP_ENV")
 
