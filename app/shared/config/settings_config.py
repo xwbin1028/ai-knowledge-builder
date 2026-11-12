@@ -1,12 +1,12 @@
 """
 应用基础配置模块。
+
 负责从环境变量中读取并管理 Web 服务启动相关的基础参数，
 包含服务名称 运行环境 监听地址 端口以及跨域白名单等，
 并将配置封装为强类型的全局单例实例 settings 供启动入口调用。
 """
 import os
 from dataclasses import dataclass
-
 from dotenv import load_dotenv
 
 

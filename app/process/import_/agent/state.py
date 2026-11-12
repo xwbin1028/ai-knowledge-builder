@@ -1,5 +1,6 @@
 """
 图状态定义模块。
+
 定义基于 TypedDict 的图状态模型 ImportGraphState 及其默认状态模板，
 提供状态实例的安全创建方法，确保流转过程中数据的类型安全与对象隔离。
 """
@@ -67,6 +68,7 @@ graph_default_state: ImportGraphState = {
 def create_default_state(**kwargs) -> ImportGraphState:
     """
     创建带有自定义初始值的全新状态对象。
+
     通过深拷贝默认模板防止不同任务间的数据污染，并允许通过 kwargs 覆盖默认字段。
 
     Args:

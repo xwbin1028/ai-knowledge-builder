@@ -11,7 +11,8 @@ from app.shared.runtime.logger import logger, PROJECT_ROOT
 # 核心方法
 # ---------------------------------------------------------------------------
 def load_prompt(name: str, **kwargs) -> str:
-    """加载提示词文件并渲染变量占位符。
+    """
+    加载提示词文件并渲染变量占位符。
 
     根据传入的模板名称，从项目资源目录中读取对应的 .prompt 文件；
     若传入了关键字参数，则使用 Python 的 str.format 机制替换模板中的占位符。

@@ -1,5 +1,6 @@
 """
 基础设施配置聚合模块。
+
 将各独立配置文件中的配置实例聚合到统一的 InfraConfig 数据类中，
 为上层业务代码提供一站式的全局配置访问入口 infra_config。
 """
@@ -22,6 +23,7 @@ from dataclasses import dataclass, field
 class InfraConfig:
     """
     基础设施全局配置聚合类。
+
     将各个子系统的配置对象组合在一起，方便统一传递与依赖注入。
     使用 field 的 default_factory 延迟加载实例，因为 dataclass 不允许直接
     将可变对象作为默认值。
