@@ -7,7 +7,8 @@ import os
 from dotenv import load_dotenv
 
 # 模块加载时自动读取 .env 文件
-load_dotenv()
+# override=True 表示如果系统中已存在同名环境变量，则强制使用 .env 文件中的值覆盖
+load_dotenv(override=True)
 
 # ---------------------------------------------------------------------------
 # 全局常量
