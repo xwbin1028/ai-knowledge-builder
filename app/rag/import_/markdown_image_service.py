@@ -8,7 +8,8 @@ from app.process.import_.agent.state import ImportGraphState
 
 
 def enrich_markdown_image(state: ImportGraphState) -> ImportGraphState:
-    """Markdown 图片增强服务。
+    """
+    Markdown 图片增强服务。
 
     执行步骤：
         1. 扫描 Markdown 中的图片。

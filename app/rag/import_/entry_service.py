@@ -8,7 +8,8 @@ from app.process.import_.agent.state import ImportGraphState
 
 
 def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
-    """入口识别服务。
+    """
+    入口识别服务。
 
     执行步骤：
         1. 校验 local_file_path。
