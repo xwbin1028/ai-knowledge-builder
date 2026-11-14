@@ -25,7 +25,7 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
         state (ImportGraphState): 导入流程全局状态，必须包含 local_file_path 和 task_id 字段。
 
     Returns:
-        ImportGraphState: 补全文件信息后的完整状态对象。
+        ImportGraphState: 补全 is_md_read_enabled，is_pdf_read_enabled，pdf_path，md_path，file_title
 
     Raises:
         ValueError: 当文件路径为空时抛出。
@@ -42,7 +42,7 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
         )
         raise ValueError("文件路径 local_file_path 不能为空")
 
-    file_path = Path(local_file_path)
+    file_path: Path = Path(local_file_path)
 
     # 2. 校验文件是否真实存在 - 补全原注释中的业务意图
     if not file_path.exists():
@@ -53,8 +53,8 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
         )
         raise FileNotFoundError(f"文件不存在: {local_file_path}")
 
-    file_suffix = file_path.suffix.lower()
-    file_title = file_path.stem
+    file_suffix: str = file_path.suffix.lower()
+    file_title: str = file_path.stem
 
     # 3. 根据文件后缀分流并装配状态
     if file_suffix == ".md":
