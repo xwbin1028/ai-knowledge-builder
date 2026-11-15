@@ -22,7 +22,7 @@ import os
 import time
 from pathlib import Path
 from functools import wraps
-from typing import Mapping
+from typing import Any, Callable, Mapping
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -236,4 +236,180 @@ def step_log(step_name: str):
 
         return wrapper
 
+    return deco
+
+
+# ---------------------------------------------------------------------------
+# 函数调用日志装饰器
+# ---------------------------------------------------------------------------
+# 敏感参数关键词：命中即脱敏
+_SENSITIVE_KEYWORDS = (
+    "password", "passwd", "pwd", "token", "secret", "api_key", "apikey",
+    "access_key", "private_key", "authorization", "cookie", "credential",
+)
+_MAX_VALUE_LEN = 200
+_MAX_ITEMS = 10
+
+
+def _is_sensitive(name: str) -> bool:
+    lowered = name.lower()
+    return any(k in lowered for k in _SENSITIVE_KEYWORDS)
+
+
+def _safe_repr(value: Any, max_len: int = _MAX_VALUE_LEN) -> str:
+    """安全、可读、截断地表示任意对象，绝不因 __repr__ 抛错而拖垮业务。"""
+    try:
+        if isinstance(value, str):
+            return value if len(value) <= max_len else f"{value[:max_len]}...<len={len(value)}>"
+        if isinstance(value, (list, tuple, set, frozenset)):
+            items = list(value)
+            if len(items) <= _MAX_ITEMS:
+                return repr(value)
+            preview = ", ".join(_safe_repr(v, max_len // 2) for v in items[:_MAX_ITEMS])
+            return f"[{preview}, ... <total={len(items)}>]"
+        if isinstance(value, dict):
+            if len(value) <= _MAX_ITEMS:
+                return repr(value)
+            preview = ", ".join(
+                f"{k!r}: {_safe_repr(v, max_len // 2)}"
+                for k, v in list(value.items())[:_MAX_ITEMS]
+            )
+            return f"{{{preview}, ... <total={len(value)}>}}"
+        text = repr(value)
+        return text if len(text) <= max_len else f"{text[:max_len]}...<truncated>"
+    except Exception:
+        return f"<unrepresentable {type(value).__name__}>"
+
+
+def _format_params(func: Callable, args: tuple, kwargs: dict) -> str:
+    """把实参按 name=value 整理，覆盖位置参数 / 关键字 / 默认值 / *args / **kwargs。"""
+    try:
+        sig = inspect.signature(func)
+        bound = sig.bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+    except (TypeError, ValueError):
+        return f"args={_safe_repr(args)}, kwargs={_safe_repr(kwargs)}"
+
+    parts: list[str] = []
+    for name, value in bound.arguments.items():
+        param = sig.parameters.get(name)
+        # 跳过未传入且为空的 *args / **kwargs，避免日志噪音
+        if (
+            param is not None
+            and param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and not value
+        ):
+            continue
+        parts.append(f"{name}=***" if _is_sensitive(name) else f"{name}={_safe_repr(value)}")
+    return ", ".join(parts) if parts else "<无参数>"
+
+
+def _format_return(value: Any, return_names: list[str] | None = None) -> str:
+    """把返回值整理为可读文本；无返回值时明确标注。"""
+    if value is None:
+        return "无返回值"
+    if isinstance(value, (tuple, list)):
+        if not value:
+            return "无返回值（空容器）"
+        if return_names and len(return_names) == len(value):
+            return ", ".join(f"{n}={_safe_repr(v)}" for n, v in zip(return_names, value))
+        if len(value) <= _MAX_ITEMS:
+            return ", ".join(f"result[{i}]={_safe_repr(v)}" for i, v in enumerate(value))
+        preview = ", ".join(f"result[{i}]={_safe_repr(v)}" for i, v in enumerate(value[:_MAX_ITEMS]))
+        return f"{preview}, ... <total={len(value)}>"
+    if isinstance(value, dict):
+        items = list(value.items())
+        if len(items) <= _MAX_ITEMS:
+            return ", ".join(f"result[{k!r}]={_safe_repr(v)}" for k, v in items)
+        preview = ", ".join(f"result[{k!r}]={_safe_repr(v)}" for k, v in items[:_MAX_ITEMS])
+        return f"{preview}, ... <total={len(items)}>"
+    return f"result={_safe_repr(value)}"
+
+
+def _resolve_call_site(target: Callable) -> tuple[str, str, int]:
+    """解析被装饰函数自身的 (py 文件名, 函数名, def 行号)，作为日志中的位置字段。"""
+    try:
+        source_file = inspect.getsourcefile(target)
+        file_name = Path(source_file).name if source_file else "<unknown>"
+    except (TypeError, OSError):
+        file_name = "<unknown>"
+    try:
+        lines, start = inspect.getsourcelines(target)
+        for offset, line in enumerate(lines):
+            if line.lstrip().startswith(("def ", "async def ")):
+                return file_name, target.__name__, start + offset
+        return file_name, target.__name__, start
+    except (TypeError, OSError):
+        return file_name, target.__name__, target.__code__.co_firstlineno
+
+
+def function_log(
+    func: Callable | None = None,
+    *,
+    func_name: str | None = None,
+    return_names: list[str] | None = None,
+):
+    """
+    通用函数调用日志装饰器，同步/异步函数均适用。
+
+    日志位置（name/function/line）绑定被装饰函数自身，而非 wrapper 或调用方；
+    开始记录参数名=参数值，完成记录返回值（无返回值时明确标注），异常记录堆栈
+    并原样抛出。支持 @function_log 与 @function_log(...) 两种写法。
+
+    Args:
+        func: 被装饰函数，@function_log 裸用时自动传入。
+        func_name: 日志业务名，缺省用真实函数名。
+        return_names: tuple/list 返回值逐项命名，如 ["pdf_path_obj", "local_dir_obj"]。
+    """
+
+    def deco(target: Callable):
+        log_name = func_name or target.__name__
+        file_name, real_name, def_line = _resolve_call_site(target)
+
+        def position_patcher(record: dict) -> None:
+            record.update(name=file_name, function=real_name, line=def_line)
+
+        # 关键：用 base_logger 绕过 fix_log_position 的栈遍历，位置直接绑定被装饰函数
+        target_logger = base_logger.patch(position_patcher)
+
+        if inspect.iscoroutinefunction(target):
+            @wraps(target)
+            async def async_wrapper(*args, **kwargs):
+                params_text = _format_params(target, args, kwargs)
+                start_ts = time.time()
+                target_logger.info(f"[{log_name}] 开始执行 | 参数: {params_text}")
+                try:
+                    result = await target(*args, **kwargs)
+                    cost_ms = int((time.time() - start_ts) * 1000)
+                    target_logger.info(
+                        f"[{log_name}] 执行完毕 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
+                    )
+                    return result
+                except Exception:
+                    cost_ms = int((time.time() - start_ts) * 1000)
+                    target_logger.exception(f"[{log_name}] 执行异常 | 耗时={cost_ms}ms")
+                    raise
+            return async_wrapper
+
+        @wraps(target)
+        def sync_wrapper(*args, **kwargs):
+            params_text = _format_params(target, args, kwargs)
+            start_ts = time.time()
+            target_logger.info(f"[{log_name}] 开始执行 | 参数: {params_text}")
+            try:
+                result = target(*args, **kwargs)
+                cost_ms = int((time.time() - start_ts) * 1000)
+                target_logger.info(
+                    f"[{log_name}] 执行完毕 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
+                )
+                return result
+            except Exception:
+                cost_ms = int((time.time() - start_ts) * 1000)
+                target_logger.exception(f"[{log_name}] 执行异常 | 耗时={cost_ms}ms")
+                raise
+
+        return sync_wrapper
+
+    if func is not None:
+        return deco(func)
     return deco

@@ -5,87 +5,65 @@
 将识别结果回写到图状态中，供后续节点路由使用。
 """
 from app.process.import_.agent.state import ImportGraphState
-from app.shared.runtime.logger import logger
+from app.shared.runtime.logger import logger, function_log, PROJECT_ROOT
 from pathlib import Path
 
 
-def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
+@function_log(
+    func_name="输入文件类型识别",
+    return_names=["state"],
+)
+def resolve_input_file(state: ImportGraphState) -> tuple[Path, Path]:
     """
-    文件类型识别与状态初始化节点。
-
-    核心功能：根据本地文件路径识别文件类型，自动装配对应状态字段，为后续流程路由提供依据。
+    核心功能：输入文件类型识别
 
     业务逻辑：
-        1. 校验文件路径是否为空且真实存在。
-        2. 根据后缀识别 MD 或 PDF 文件。
-        3. 自动填充对应路径、路由开关、文件标题。
-        4. 不支持的文件类型直接跳过状态装配。
+        1. 从 state 中获取 local_file_dir(输出文件夹的路径) pdf_path(pdf 文件存储路径)
+        2. 判空 pdf_path
+        3. 判空 local_file_dir
+        4. 转换 Path 对象 pdf_path->pdf_path_po  local_file_dir->local_file_dir_po
+        5. 判空 pdf_path_po
+        6. 判空 local_file_dir_po
+        7. 返回 pdf_path_po  local_file_dir_po
 
     Args:
-        state (ImportGraphState): 导入流程全局状态，必须包含 local_file_path 和 task_id 字段。
+        state (ImportGraphState): 流程全局状态。
 
     Returns:
-        ImportGraphState: 补全 is_md_read_enabled，is_pdf_read_enabled，pdf_path，md_path，file_title
+        tuple[Path, Path]: 返回 pdf 文件路径和输出目录路径。
 
     Raises:
-        ValueError: 当文件路径为空时抛出。
-        FileNotFoundError: 当指定的文件在磁盘上不存在时抛出。
+        ValueError: 当 state 中的 pdf_path 为空时抛出。
+        FileNotFoundError: 当 pdf_path_po 指向的路径不存在或不是文件时抛出。
     """
-    local_file_path: str = state.get("local_file_path", "")
+    # 1. 从 state 中获取 local_file_dir pdf_path
     task_id: str = state.get("task_id", "")
+    local_file_dir: str = state.get("local_file_dir", "")
+    pdf_path: str = state.get("pdf_path", "")
 
-    # 1. 校验路径是否为空
-    if not local_file_path:
-        logger.error(
-            "文件路径为空，无法识别文件类型 - task_id: {task_id}",
-            task_id=task_id
-        )
-        raise ValueError("文件路径 local_file_path 不能为空")
+    # 2. 判空 pdf_path
+    if not pdf_path:
+        logger.error(f"task_id({task_id})【业务终止】-|-文件存储路径为空 pdf_path({pdf_path})")
+        raise ValueError(f"task_id({task_id})【业务终止】-|-文件存储路径为空 pdf_path({pdf_path})")
 
-    file_path: Path = Path(local_file_path)
+    # 3. 判空 local_file_dir
+    if not local_file_dir:
+        local_file_dir = PROJECT_ROOT / "output"
+        logger.warning(f"task_id({task_id})【业务警告】-|-输出文件夹的路径为空,配置默认值 local_file_dir({local_file_dir})")
+        state["local_file_dir"] = str(local_file_dir)
 
-    # 2. 校验文件是否真实存在 - 补全原注释中的业务意图
-    if not file_path.exists():
-        logger.error(
-            "文件不存在，请检查路径 - task_id: {task_id}, file: {file_path}",
-            task_id=task_id,
-            file_path=local_file_path
-        )
-        raise FileNotFoundError(f"文件不存在: {local_file_path}")
+    # 4. 转换 Path 对象 pdf_path->pdf_path_po  local_file_dir->local_file_dir_po
+    pdf_path_po: Path = Path(pdf_path)
+    local_file_dir_po: Path = Path(local_file_dir)
 
-    file_suffix: str = file_path.suffix.lower()
-    file_title: str = file_path.stem
+    # 5. 判空 pdf_path_po
+    if not pdf_path_po.is_file():
+        logger.error(f"task_id({task_id})【业务终止】-|-文件存储路径为空 pdf_path_po({pdf_path_po})")
+        raise FileNotFoundError(f"task_id({task_id})【业务终止】-|-文件存储路径为空 pdf_path_po({pdf_path_po})")
 
-    # 3. 根据文件后缀分流并装配状态
-    if file_suffix == ".md":
-        logger.info(
-            "识别到 Markdown 文件，准备进入图片处理流程 - task_id: {task_id}, file: {file_title}",
-            task_id=task_id,
-            file_title=file_title
-        )
-        state["is_md_read_enabled"] = True
-        state["is_pdf_read_enabled"] = False
-        state["md_path"] = local_file_path
-    elif file_suffix == ".pdf":
-        logger.info(
-            "识别到 PDF 文件，准备进入解析转换流程 - task_id: {task_id}, file: {file_title}",
-            task_id=task_id,
-            file_title=file_title
-        )
-        state["is_md_read_enabled"] = False
-        state["is_pdf_read_enabled"] = True
-        state["pdf_path"] = local_file_path
-    else:
-        # 不支持的类型直接返回，后续路由会识别到两个开关均为 False 而走向 END
-        logger.warning(
-            "不支持的文件类型，跳过状态装配 - task_id: {task_id}, file: {file_title}, suffix: {suffix}",
-            task_id=task_id,
-            file_title=file_title,
-            suffix=file_suffix
-        )
-        return state
+    # 6. 判空 local_file_dir_po
+    if not local_file_dir_po.is_dir():
+        logger.warning(f"task_id({task_id})【业务警告】-|-输出文件夹的路径为空,创建默认值文件夹 local_file_dir_po({local_file_dir_po})")
+        local_file_dir_po.mkdir(parents=True, exist_ok=True)
 
-    # 回写文件标题
-    state["file_title"] = file_title
-
-    return state
+    return pdf_path_po, local_file_dir_po

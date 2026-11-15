@@ -9,13 +9,7 @@ from app.process.import_.agent.state import ImportGraphState
 
 def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     """
-    PDF 解析服务。
-
-    执行步骤：
-        1. 调用 MinerU 解析服务。
-        2. 下载并解压解析结果。
-        3. 获取 Markdown 路径与正文内容。
-        4. 回写 md_path / md_content / local_dir。
+    PDF 解析服务主入口。
 
     Args:
         state (ImportGraphState): 图全局状态。
