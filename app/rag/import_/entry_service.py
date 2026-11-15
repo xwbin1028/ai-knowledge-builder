@@ -26,13 +26,13 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
         4. 判断(local_file_path_po)
         5. 判断后缀(local_file_path_po_suffix)
         6. 更新(local_file_path_po_suffix)
-        7. 返回 state
+        7. 返回(state)
 
     Args:
-        全局状态 state: ImportGraphState
+        state (ImportGraphState): 流程全局状态。
 
     Returns:
-        全局状态 state: ImportGraphState
+        state (ImportGraphState): 流程全局状态。
 
     Raises:
         ValueError: 当 local_file_path 缺失、不是字符串或为空白字符串时抛出；
@@ -67,9 +67,9 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
     local_file_path_po_suffix: str = local_file_path_po.suffix.lower()
     if local_file_path_po_suffix not in ALLOWED_INPUT_SUFFIXES:
         logger.error(
-            f"task_id({task_id})【业务终止】-|-文件类型不支持 local_file_path_po_suffix({local_file_path_po_suffix}) 仅支持({ALLOWED_INPUT_SUFFIXES})")
+            f"task_id({task_id})【业务终止】-|-文件类型不支持 local_file_path_po_suffix({local_file_path_po_suffix}),仅支持({ALLOWED_INPUT_SUFFIXES})")
         raise ValueError(
-            f"task_id({task_id})【业务终止】-|-文件类型不支持 local_file_path_po_suffix({local_file_path_po_suffix}) 仅支持({ALLOWED_INPUT_SUFFIXES})")
+            f"task_id({task_id})【业务终止】-|-文件类型不支持 local_file_path_po_suffix({local_file_path_po_suffix}),仅支持({ALLOWED_INPUT_SUFFIXES})")
 
     # 6. 更新(local_file_path_po_suffix)
     if local_file_path_po_suffix == MD_SUFFIX:

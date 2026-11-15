@@ -12,3 +12,6 @@ PDF_SUFFIX: Final[str] = ".pdf"
 
 # 允许作为输入文件的扩展名白名单
 ALLOWED_INPUT_SUFFIXES: Final[tuple[str, ...]] = (MD_SUFFIX, PDF_SUFFIX)
+
+# 默认的输出文件夹名称（用于拼接项目根目录生成绝对路径）
+DEFAULT_OUTPUT_DIR_NAME: Final[str] = "output"
