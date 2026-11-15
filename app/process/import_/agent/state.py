@@ -20,7 +20,7 @@ class ImportGraphState(TypedDict):
 
     Attributes:
         task_id (str): 任务唯一标识。
-        local_file_path (str): 输入文件夹的路径。
+        local_file_path (str): 输入文件的路径。
         local_file_dir (str): 输出文件夹的路径。
         is_md_read_enabled (bool): 是否启用 Markdown 文件解析。
         is_pdf_read_enabled (bool): 是否启用 PDF 文件解析。
