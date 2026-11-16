@@ -2,7 +2,7 @@
 MinerU 解析服务配置与常量模块。
 
 集中管理 MinerU 服务的运行参数（模型版本、超时时间、轮询间隔）
-以及接口交互过程中的协议常量（HTTP 状态码、业务返回码、请求路径）。
+以及接口交互过程中的协议常量（HTTP 状态码、业务返回码、请求路径、业务状态）。
 """
 from typing import Final
 
@@ -35,6 +35,10 @@ MINERU_DOWNLOAD_TIMEOUT_SECONDS: Final[int] = 300
 # HTTP 协议层成功状态码
 HTTP_STATUS_OK: Final[int] = 200
 
+# HTTP 5xx 服务端错误状态码范围
+HTTP_STATUS_SERVER_ERROR_START: Final[int] = 500
+HTTP_STATUS_SERVER_ERROR_END: Final[int] = 600
+
 # --- MinerU 业务层 ---
 # MinerU 业务层成功返回码
 MINERU_API_SUCCESS_CODE: Final[int] = 0
@@ -45,3 +49,31 @@ MINERU_API_ERROR_CODE: Final[int] = -1
 # --- 接口路径 ---
 # MinerU 批量上传文件获取 URL 的接口路径
 MINERU_BATCH_UPLOAD_PATH: Final[str] = "/file-urls/batch"
+
+# MinerU 批量获取解析结果 URL 的接口路径
+MINERU_BATCH_EXTRACT_RESULTS_PATH: Final[str] = "/extract-results/batch/"
+
+# --- MinerU 解析状态 ---
+MINERU_STATE_FAILED: Final[str] = "failed"
+MINERU_STATE_RUNNING: Final[str] = "running"
+MINERU_STATE_PENDING: Final[str] = "pending"
+MINERU_STATE_WAITING_FILE: Final[str] = "waiting-file"
+MINERU_STATE_CONVERTING: Final[str] = "converting"
+
+# 处于处理中的状态集合
+MINERU_RUNNING_STATES: Final[tuple[str, ...]] = (
+    MINERU_STATE_RUNNING,
+    MINERU_STATE_PENDING,
+    MINERU_STATE_WAITING_FILE,
+    MINERU_STATE_CONVERTING
+)
+
+# --- JSON 响应体键名 ---
+# 统一提取键名，防止在代码中写错魔法字符串
+JSON_KEY_CODE: Final[str] = "code"
+JSON_KEY_DATA: Final[str] = "data"
+JSON_KEY_BATCH_ID: Final[str] = "batch_id"
+JSON_KEY_FILE_URLS: Final[str] = "file_urls"
+JSON_KEY_EXTRACT_RESULT: Final[str] = "extract_result"
+JSON_KEY_STATE: Final[str] = "state"
+JSON_KEY_FULL_ZIP_URL: Final[str] = "full_zip_url"
