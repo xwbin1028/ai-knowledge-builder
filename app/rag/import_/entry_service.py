@@ -12,12 +12,12 @@ from typing import Any
 
 
 @function_log(
-    func_name="校验输入文件路径，识别类型并分流写入状态",
-    return_names=["state"],
+    func_name="校验输入文件并识别类型",
+    return_names=["state"]
 )
 def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
     """
-    核心功能：校验输入文件路径，识别类型并分流写入状态
+    核心功能：校验输入文件并识别类型
 
     业务逻辑：
         1. 从(state)中获取输入文件的路径(local_file_path)
@@ -29,10 +29,10 @@ def resolve_input_file(state: ImportGraphState) -> ImportGraphState:
         7. 返回(state)
 
     Args:
-        state (ImportGraphState): 流程全局状态。
+        (state)流程全局状态
 
     Returns:
-        state (ImportGraphState): 流程全局状态。
+        (state)流程全局状态
 
     Raises:
         ValueError: 当 local_file_path 缺失、不是字符串或为空白字符串时抛出；
