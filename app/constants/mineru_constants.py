@@ -25,6 +25,8 @@ MINERU_POLL_INTERVAL_SECONDS: int = 3
 # 300 秒即 5 分钟，用于 requests 的 timeout 参数
 MINERU_DOWNLOAD_TIMEOUT_SECONDS: int = 300
 
+MINERU_BATCH_UPLOAD_PATH: Final[str] = "/file-urls/batch"
+
 
 # ===========================================================================
 # 2. 接口协议常量
