@@ -76,4 +76,13 @@ JSON_KEY_BATCH_ID: Final[str] = "batch_id"
 JSON_KEY_FILE_URLS: Final[str] = "file_urls"
 JSON_KEY_EXTRACT_RESULT: Final[str] = "extract_result"
 JSON_KEY_STATE: Final[str] = "state"
-JSON_KEY_FULL_ZIP_URL: Final[str] = "full_zip_url"
+JSON_KEY_MINERU_ZIP_URL: Final[str] = "mineru_zip_url"  # 如果这是接口返回字段名，保留在这里
+
+
+# ===========================================================================
+# 3. MinerU 专属文件命名常量
+# ===========================================================================
+# MinerU 解析结果输出压缩包重命名后缀
+MINERU_OUTPUT_ZIP_RENAME_SUFFIX: Final[str] = "_mineru_output.zip"
+
+MINERU_FULL_FILE_STEM: Final[str] = "full"

@@ -5,10 +5,10 @@
 """
 from typing import Final
 
-
 # 单个后缀常量（统一小写存储，比较时对目标后缀 .lower()）
 MD_SUFFIX: Final[str] = ".md"
 PDF_SUFFIX: Final[str] = ".pdf"
+GLOB_MD_FILES: Final[str] = f"*{MD_SUFFIX}"
 
 # 允许作为输入文件的扩展名白名单
 ALLOWED_INPUT_SUFFIXES: Final[tuple[str, ...]] = (MD_SUFFIX, PDF_SUFFIX)

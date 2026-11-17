@@ -6,42 +6,167 @@ PDF 解析服务模块。
 """
 from app.process.import_.agent.state import ImportGraphState
 from app.shared.runtime.logger import logger, function_log, PROJECT_ROOT
-from app.constants.file_constants import DEFAULT_OUTPUT_DIR_NAME
 from app.infra.config.providers import infra_config
 from app.constants.mineru_constants import *
+from app.constants.file_constants import *
 from requests.models import Response
 from pathlib import Path
 from typing import Any
 import requests
+import shutil
 import time
 
 
+@function_log(
+    func_name="PDF 解析主入口",
+    return_names=["state"]
+)
 def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     """
-    PDF 解析服务主入口。
+    核心功能：PDF 解析服务主入口（MinerU 全链路流水线）
+
+    业务逻辑：
+        1. 校验本地 PDF 路径与输出目录，获取 Path 对象(pdf_path_po, local_file_dir_po)
+        2. 向 MinerU 申请文件预签名上传链接与批次 ID(mineru_batch_id, upload_mineru_file_url)
+        3. 将本地 PDF 文件流上传至预签名链接(upload_mineru_file_url)
+        4. 轮询 MinerU 获取解析结果的 ZIP 下载链接(mineru_zip_url)
+        5. 下载 ZIP 包并解压，提取目标 Markdown 文件的绝对路径(md_path)
+        6. 将(md_path)回写至图状态并返回
 
     Args:
-        state (ImportGraphState): 图全局状态。
+        (state)流程全局状态
 
     Returns:
-        ImportGraphState: 更新后的图全局状态。
-    """
+        (state)更新了 md_path 等信息的全局状态
 
-    # 1. 进行参数合理性校验
+    Raises:
+        ValueError: 当本地 PDF 路径或输出目录参数非法时抛出
+        FileNotFoundError: 当本地 PDF 文件不存在时抛出
+        TimeoutError: 当 MinerU 解析轮询超时时抛出
+        RuntimeError: 当网络请求、接口业务报错或文件解压提取失败时抛出
+    """
+    task_id: str = state.get("task_id", "") or ""
+    pdf_path_po: Path
+    local_file_dir_po: Path
+    mineru_batch_id: str
+    upload_mineru_file_url: str
+    mineru_zip_url: str
+    md_path: str
+
+    # 1. 校验本地 PDF 路径与输出目录
     pdf_path_po, local_file_dir_po = validates_pdf_paths(state)
-    # 2. 向minerU申请文件上传地址和batch_id
+
+    # 2. 向 MinerU 申请文件预签名上传链接与批次 ID
     mineru_batch_id, upload_mineru_file_url = apply_mineru_get_upload_url(state, pdf_path_po.name)
-    # 3. 向指定的文件地址(预签名地址)上传文件数据
+
+    # 3. 将本地 PDF 文件流上传至预签名链接
     upload_file_to_url(state, pdf_path_po, upload_mineru_file_url)
-    # 4. 轮询获取解析结果
-    full_zip_url: str = poll_mineru_zip_url(state, mineru_batch_id)
-    print(full_zip_url)
+
+    # 4. 轮询 MinerU 获取解析结果的 ZIP 下载链接
+    mineru_zip_url = poll_mineru_zip_url(state, mineru_batch_id)
+
+    # 5. 下载 ZIP 包并解压，提取目标 Markdown 文件的绝对路径
+    md_path = download_and_extract_md(state, mineru_zip_url, local_file_dir_po, pdf_path_po.stem)
+
+    # 6. 将提取到的 md_path 回写至图状态
+    state['md_path'] = md_path
+
+    logger.info(f"task_id({task_id})【业务提示】-|-PDF 解析全链路完成,已写入 md_path({md_path})")
+
     return state
 
 
 @function_log(
+    func_name="下载并解压 MinerU 解析结果",
+    return_names=["md_path"]
+)
+def download_and_extract_md(state: ImportGraphState, mineru_zip_url: str, local_file_dir_po: Path,
+                            pdf_path_po_stem: str) -> str:
+    """
+    核心功能：下载 MinerU 解析结果 ZIP，解压并提取目标 Markdown 文件路径
+
+    业务逻辑：
+        1. 发送(get)请求下载 ZIP 数据，并判断 HTTP 状态码
+        2. 配置本地 ZIP 存储路径(output_mineru_zip_file_po)并写入二进制数据
+        3. 配置解压目标目录(output_mineru_zip_dir_po)，若已存在则清理
+        4. 执行解压(shutil.unpack_archive)
+        5. 获取解压后所有的 md 文件(output_mineru_dir_md_list)
+        6. 遍历查找目标文件：优先匹配原文件名，其次匹配 full.md 并重命名
+        7. 返回最终的 md 文件路径(md_path)
+
+    Args:
+        (state)流程全局状态
+        (mineru_zip_url)MinerU 解析结果的 ZIP 下载链接
+        (local_file_dir_po)本地输出目录的 Path 对象
+        (pdf_path_po_stem)原 PDF 文件的主干名
+
+    Returns:
+        (md_path)解压并整理后，最终的 Markdown 文件路径字符串
+
+    Raises:
+        RuntimeError: 当网络请求失败、文件写入/解压异常，或未找到合法的 Markdown 文件时抛出
+    """
+    # 1. 发送(get)请求下载 ZIP 数据
+    task_id: str = state.get("task_id", "") or ""
+    md_path: str
+    resp: Response = requests.get(url=mineru_zip_url, timeout=MINERU_DOWNLOAD_TIMEOUT_SECONDS)
+
+    # 2. 配置本地 ZIP 存储路径并写入二进制数据
+    output_mineru_zip_file_po: Path = local_file_dir_po / f"{pdf_path_po_stem}{MINERU_OUTPUT_ZIP_RENAME_SUFFIX}"
+    output_mineru_zip_file_po.write_bytes(data=resp.content)
+
+    # 3. 配置解压目标目录，若已存在则清理
+    output_mineru_zip_dir_po: Path = local_file_dir_po / pdf_path_po_stem
+    if output_mineru_zip_dir_po.is_dir():
+        logger.warning(
+            f"task_id({task_id})【业务警告】-|-解压目录已存在,即将清空重建 output_mineru_zip_dir_po({output_mineru_zip_dir_po})")
+        shutil.rmtree(output_mineru_zip_dir_po)
+
+    output_mineru_zip_dir_po.mkdir(parents=True, exist_ok=True)
+
+    # 4. 执行解压
+    shutil.unpack_archive(output_mineru_zip_file_po, output_mineru_zip_dir_po)
+
+    # 5. 获取解压后所有的 md 文件
+    output_mineru_dir_md_list: list[Path] = list(output_mineru_zip_dir_po.rglob(GLOB_MD_FILES))
+
+    # 6. 判断是否提取到 md 文件
+    if not output_mineru_dir_md_list:
+        logger.error(
+            f"task_id({task_id})【业务终止】-|-解压后未找到合法的 Markdown 文件 output_mineru_dir_md_list({output_mineru_zip_dir_po})")
+        raise RuntimeError(
+            f"task_id({task_id})【业务终止】-|-解压后未找到合法的 Markdown 文件 output_mineru_dir_md_list({output_mineru_zip_dir_po})")
+
+    # 7. 遍历查找目标文件并处理
+    mineru_target_rename_md_po: Path | None = None
+    for output_mineru_file_md in output_mineru_dir_md_list:
+        # 情况 A：直接找到了同名的 md 文件
+        if output_mineru_file_md.stem == pdf_path_po_stem:
+            md_path = str(output_mineru_file_md)
+            logger.info(f"task_id({task_id})【业务提示】-|-成功找到目标同名 Markdown 文件 md_path({md_path})")
+            return md_path
+
+        # 情况 B：找到了名为 full 的 md 文件（记为待重命名目标）
+        if output_mineru_file_md.stem == MINERU_FULL_FILE_STEM:
+            mineru_target_rename_md_po = output_mineru_file_md
+            break
+
+    # 8. 如果找到了 full.md，将其重命名为原 PDF 的同名 md
+    if mineru_target_rename_md_po:
+        final_md_po: Path = mineru_target_rename_md_po.with_name(f"{pdf_path_po_stem}{MD_SUFFIX}")
+        md_path = str(mineru_target_rename_md_po.rename(final_md_po))
+        logger.info(f"task_id({task_id})【业务提示】-|-已将 full.md 重命名为目标文件 md_path({md_path})")
+        return md_path
+    else:
+        logger.error(
+            f"task_id({task_id})【业务终止】-|-解压后既没有同名文件，也没有 full.md 文件 output_mineru_zip_dir_po({output_mineru_zip_dir_po})")
+        raise RuntimeError(
+            f"task_id({task_id})【业务终止】-|-解压后既没有同名文件，也没有 full.md 文件 output_mineru_zip_dir_po({output_mineru_zip_dir_po})")
+
+
+@function_log(
     func_name="轮询 MinerU 解析结果",
-    return_names=["full_zip_url"]
+    return_names=["mineru_zip_url"]
 )
 def poll_mineru_zip_url(state: ImportGraphState, batch_id: str) -> str:
     """
@@ -58,14 +183,14 @@ def poll_mineru_zip_url(state: ImportGraphState, batch_id: str) -> str:
     8. 获取(mineru)响应结果(extract_result_list)
     9. 判断提取结果(extract_result_list)是否合法
     10. 判断解析状态(resp_json_data_extract_result_state)并处理
-    11. 获取并返回解析结果下载链接(full_zip_url)
+    11. 获取并返回解析结果下载链接(mineru_zip_url)
 
     Args:
         (state)流程全局状态
         (batch_id)MinerU 接口返回的批次 ID
 
     Returns:
-        (full_zip_url)MinerU 解析结果的 ZIP 下载链接
+        (mineru_zip_url)MinerU 解析结果的 ZIP 下载链接
 
     Raises:
         TimeoutError: 当轮询总时长超过最大等待时间时抛出
@@ -145,16 +270,16 @@ def poll_mineru_zip_url(state: ImportGraphState, batch_id: str) -> str:
             time.sleep(MINERU_POLL_INTERVAL_SECONDS)
             continue
 
-        # 11. 获取并返回解析结果下载链接(full_zip_url)
-        full_zip_url: str = resp_json_data_extract_result.get(JSON_KEY_FULL_ZIP_URL, "")
+        # 11. 获取并返回解析结果下载链接(mineru_zip_url)
+        mineru_zip_url: str = resp_json_data_extract_result.get(JSON_KEY_MINERU_ZIP_URL, "")
 
-        if not isinstance(full_zip_url, str) or not full_zip_url.strip():
+        if not isinstance(mineru_zip_url, str) or not mineru_zip_url.strip():
             logger.error(
-                f"task_id({task_id})【业务终止】-|-MinerU 解析完成但未返回合法的下载链接 full_zip_url({full_zip_url})")
+                f"task_id({task_id})【业务终止】-|-MinerU 解析完成但未返回合法的下载链接 mineru_zip_url({mineru_zip_url})")
             raise RuntimeError(
-                f"task_id({task_id})【业务终止】-|-MinerU 解析完成但未返回合法的下载链接 full_zip_url({full_zip_url})")
+                f"task_id({task_id})【业务终止】-|-MinerU 解析完成但未返回合法的下载链接 mineru_zip_url({mineru_zip_url})")
 
-        return full_zip_url
+        return mineru_zip_url
 
 
 @function_log(func_name="上传文件至预签名 URL")
