@@ -76,7 +76,7 @@ JSON_KEY_BATCH_ID: Final[str] = "batch_id"
 JSON_KEY_FILE_URLS: Final[str] = "file_urls"
 JSON_KEY_EXTRACT_RESULT: Final[str] = "extract_result"
 JSON_KEY_STATE: Final[str] = "state"
-JSON_KEY_MINERU_ZIP_URL: Final[str] = "mineru_zip_url"  # 如果这是接口返回字段名，保留在这里
+JSON_KEY_MINERU_ZIP_URL: Final[str] = "mineru_zip_url"
 
 
 # ===========================================================================
@@ -85,4 +85,11 @@ JSON_KEY_MINERU_ZIP_URL: Final[str] = "mineru_zip_url"  # 如果这是接口返�
 # MinerU 解析结果输出压缩包重命名后缀
 MINERU_OUTPUT_ZIP_RENAME_SUFFIX: Final[str] = "_mineru_output.zip"
 
+# MinerU 解析结果中通用 Markdown 文件的主干名
 MINERU_FULL_FILE_STEM: Final[str] = "full"
+
+# 解压后图片所在的相对目录名
+MINERU_OUTPUT_ZIP_IMAGES_DIR: Final[str] = "images"
+
+# 提取 Markdown 中图片上下文（上文/下文）的截取字符长度
+IMAGE_CONTEXT_CHAR_LENGTH: Final[int] = 100

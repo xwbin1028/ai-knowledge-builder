@@ -15,3 +15,6 @@ ALLOWED_INPUT_SUFFIXES: Final[tuple[str, ...]] = (MD_SUFFIX, PDF_SUFFIX)
 
 # 默认的输出文件夹名称（用于拼接项目根目录生成绝对路径）
 DEFAULT_OUTPUT_DIR_NAME: Final[str] = "output"
+
+# 支持的图片后缀白名单
+SUPPORTED_IMAGE_SUFFIXES: Final[tuple[str, ...]] = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")

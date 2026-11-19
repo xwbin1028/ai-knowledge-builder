@@ -146,7 +146,7 @@ def download_and_extract_md(state: ImportGraphState, mineru_zip_url: str, local_
             logger.info(f"task_id({task_id})【业务提示】-|-成功找到目标同名 Markdown 文件 md_path({md_path})")
             return md_path
 
-        # 情况 B：找到了名为 full 的 md 文件（记为待重命名目标）
+        # 情况 B：找到了名为 full 的 md 文件记为待重命名目标
         if output_mineru_file_md.stem == MINERU_FULL_FILE_STEM:
             mineru_target_rename_md_po = output_mineru_file_md
             break

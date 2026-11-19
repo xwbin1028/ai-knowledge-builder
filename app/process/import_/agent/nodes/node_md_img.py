@@ -7,7 +7,7 @@
 from app.shared.runtime.logger import node_log
 from app.shared.utils.task_utils import add_done_task, add_running_task
 from app.process.import_.agent.state import ImportGraphState
-from app.rag.import_.markdown_image_service import enrich_markdown_image
+from app.rag.import_.enrich_markdown_images import enrich_markdown_images
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +27,6 @@ def node_md_img(state: ImportGraphState) -> ImportGraphState:
         ImportGraphState: 更新后的图全局状态。
     """
     add_running_task(state["task_id"], "node_md_img")
-    state = enrich_markdown_image(state)
+    state = enrich_markdown_images(state)
     add_done_task(state["task_id"], "node_md_img")
     return state
