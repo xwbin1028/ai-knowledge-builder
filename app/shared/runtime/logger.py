@@ -1,38 +1,27 @@
 """
-项目日志工具模块。
+统一日志组件.
 
-基于 loguru 提供统一日志能力：通过 .env 控制控制台与文件双输出，
-文件日志默认写入 ``logs/app_YYYYMMDD.log``。
-
-主要特性：
-    1. 配置驱动：通过 .env 开关输出目标，并调整日志级别。
-    2. 自动路径：文件日志默认输出到“项目根目录/logs/app_YYYYMMDD.log”。
-    3. 自动清理：按配置保留日志，并自动删除过期文件。
-    4. 中文友好：使用 UTF-8 编码，避免中文乱码。
-    5. 异步安全：启用异步入队，适配多线程/异步场景，减少日志错乱。
-    6. 开箱即用：业务模块直接导入 logger 即可使用。
-    7. 调用位置精准：过滤 loguru 内部帧与本模块自身帧，定位业务代码实际调用位置。
+基于 loguru, 由 .env 控制控制台与文件双输出, 文件写入 logs/app_YYYYMMDD.log.
+业务侧只导入 logger; 节点与服务分别用 node_log 与 function_log 打点.
 """
-# ---------------------------------------------------------------------------
-# 依赖导入
-# ---------------------------------------------------------------------------
-import sys
 import inspect
 import os
+import sys
 import time
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable, Mapping
+
 from dotenv import load_dotenv
 from loguru import logger
 
 # ---------------------------------------------------------------------------
-# 环境配置加载
+# 环境配置
 # ---------------------------------------------------------------------------
-# 加载 .env 配置文件默认不覆盖已存在的环境变量
+# 加载 .env, 不覆盖已存在的系统环境变量
 load_dotenv()
 
-# 读取 .env 配置项；缺失时回退到默认值，避免配置缺失导致启动失败
+# 缺省值兜底, 避免配置缺失导致启动失败
 LOG_CONSOLE_ENABLE = os.getenv("LOG_CONSOLE_ENABLE", "True").lower() == "true"
 LOG_CONSOLE_LEVEL = os.getenv("LOG_CONSOLE_LEVEL", "INFO").upper()
 LOG_FILE_ENABLE = os.getenv("LOG_FILE_ENABLE", "True").lower() == "true"
@@ -40,15 +29,15 @@ LOG_FILE_LEVEL = os.getenv("LOG_FILE_LEVEL", "INFO").upper()
 LOG_FILE_RETENTION = os.getenv("LOG_FILE_RETENTION", "30 days")
 
 # ---------------------------------------------------------------------------
-# 路径与格式常量
+# 路径与格式
 # ---------------------------------------------------------------------------
-# 日志路径：基于当前文件位置向上推导项目根目录
+# 项目根目录, 供其他模块定位资源
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_FILE_NAME = "app_{time:YYYYMMDD}.log"
 LOG_FILE_PATH = LOG_DIR / LOG_FILE_NAME
 
-# 日志格式：包含时间、级别、模块名、函数名、行号和消息，便于阅读与定位
+# 时间 级别 文件 函数 行号 消息
 LOG_FORMAT = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
@@ -62,31 +51,30 @@ LOG_FORMAT = (
 # ---------------------------------------------------------------------------
 def init_logger():
     """
-    初始化并返回全局日志配置。
+    装配并返回 logger.
 
-    装配步骤：
-        1. 移除 loguru 默认控制台 handler，避免重复输出。
-        2. 按 LOG_CONSOLE_ENABLE 决定是否挂载 stdout handler。
-        3. 按 LOG_FILE_ENABLE 决定是否创建 logs 目录并挂载文件 handler。
-        4. 为各 handler 统一应用格式、级别、轮转与保留策略。
+    业务逻辑:
+        1. 移除 loguru 默认控制台, 避免重复输出
+        2. 按 .env 挂载控制台 sink
+        3. 按 .env 挂载文件 sink
 
     Returns:
-        loguru.Logger: 完成装配的 logger 实例。
+        loguru.Logger: 装配后的 logger.
     """
-    # 1. 移除 loguru 默认控制台输出，避免重复打印
+    # 1. 移除默认控制台, 避免重复输出
     logger.remove()
 
-    # 2. 若 .env 启用控制台输出，则添加 stdout sink
+    # 2. 控制台 sink
     if LOG_CONSOLE_ENABLE:
         logger.add(
             sink=sys.stdout,
             level=LOG_CONSOLE_LEVEL,
             format=LOG_FORMAT,
             colorize=True,
-            enqueue=True
+            enqueue=True,
         )
 
-    # 3. 若 .env 启用文件输出，则创建日志目录并添加文件 sink
+    # 3. 文件 sink, 按天轮转并按保留期清理
     if LOG_FILE_ENABLE:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         logger.add(
@@ -98,106 +86,127 @@ def init_logger():
             encoding="utf-8",
             enqueue=True,
             backtrace=True,
-            diagnose=True
+            diagnose=True,
         )
 
     return logger
 
 
-# 初始化基础 logger，供后续统一修正调用位置
-base_logger = init_logger()
+_base_logger = init_logger()
+
+
+# 本模块绝对路径, 用于过滤自身帧
+_SELF_PATH = os.path.normcase(os.path.abspath(__file__))
 
 
 # ---------------------------------------------------------------------------
 # 调用位置修正
 # ---------------------------------------------------------------------------
-def fix_log_position(record):
+def _fix_log_position(record: dict) -> None:
     """
-    修正日志记录中的调用位置字段。
+    把日志位置改写为业务代码调用点.
 
-    loguru 默认记录的 name/function/line 指向框架内部帧。本函数遍历调用栈，
-    跳过 loguru 内部帧与本模块自身帧，将 record 中的位置字段改写为业务代码
-    的实际调用点。
+    loguru 默认记录框架内部帧, 这里跳过 loguru 与本模块的帧, 原地修改 record.
 
     Args:
-        record (dict): loguru 传给 patcher 的日志记录字典，原地修改。
+        record: loguru 传给 patcher 的记录字典.
     """
     for frame in inspect.stack():
-        # 过滤 loguru 内部帧和本工具模块 logger.py 自身帧，定位业务代码调用位置
-        if ("_logger.py" in frame.filename or frame.function == "_log") or "logger.py" in frame.filename:
+        filename = frame.filename
+        # 过滤 loguru 内部帧, 本模块帧与统一异常工具的帧
+        if (
+            os.path.normcase(os.path.abspath(filename)) == _SELF_PATH
+            or os.path.basename(filename) in ("_logger.py", "error_utils.py")
+            or frame.function == "_log"
+        ):
             continue
-        # 更新日志字段为业务代码实际位置
         record.update(
-            name=frame.filename.split("/")[-1].split("\\")[-1],
+            name=os.path.basename(filename),
             function=frame.function,
-            line=frame.lineno
+            line=frame.lineno,
         )
         break
 
 
-# 为 logger 打补丁，使每条日志记录都修正为业务代码实际调用位置
-logger = base_logger.patch(fix_log_position)
+# 每条日志都修正到业务调用位置
+logger = _base_logger.patch(_fix_log_position)
 
 
 # ---------------------------------------------------------------------------
-# 装饰器工具
+# 节点与步骤装饰器
 # ---------------------------------------------------------------------------
 def _trace_id(state) -> str:
     """
-    从节点 state 中提取追踪 ID。
+    从 state 提取追踪 ID.
 
-    取值优先级为 session_id > task_id；两者均缺失或 state 不是映射类型时，
-    返回占位符 "-"，保证日志格式稳定且不因缺字段抛错。
+    优先级 session_id > task_id, 都缺失时返回 "-".
 
     Args:
-        state: 节点上下文，通常为包含 session_id / task_id 的 Mapping。
+        state: 节点上下文, 通常是 Mapping.
 
     Returns:
-        str: 追踪 ID，缺失时为 "-"。
+        str: 追踪 ID.
     """
     if isinstance(state, Mapping):
         return str(state.get("session_id") or state.get("task_id") or "-")
     return "-"
 
 
+def _resolve_call_site(target: Callable) -> tuple[str, str, int]:
+    """解析被装饰函数的 文件名 函数名 def 行号, 作为日志位置字段."""
+    try:
+        source_file = inspect.getsourcefile(target)
+        file_name = Path(source_file).name if source_file else "<unknown>"
+    except (TypeError, OSError):
+        file_name = "<unknown>"
+    try:
+        lines, start = inspect.getsourcelines(target)
+        for offset, line in enumerate(lines):
+            if line.lstrip().startswith(("def ", "async def ")):
+                return file_name, target.__name__, start + offset
+        return file_name, target.__name__, start
+    except (TypeError, OSError):
+        return file_name, target.__name__, target.__code__.co_firstlineno
+
+
 def node_log(node_name: str):
     """
-    节点日志装饰器，适用于首个参数为 state 的图/流水线节点函数。
+    节点日志装饰器, 适用于首参为 state 的图节点.
 
-    自动记录三类事件：
-        - 节点开始：节点名 + 追踪 ID。
-        - 节点完成：节点名 + 追踪 ID + 耗时毫秒。
-        - 节点异常：节点名 + 追踪 ID + 完整堆栈，并原样抛出异常。
-
-    被装饰函数契约：
-        - 第一个位置参数必须是 state，用于提取追踪 ID；
-        - 返回值原样透传，装饰器不改变业务返回值；
-        - 异常不吞没，记录堆栈后重新抛出。
+    记录开始 完成 耗时 与异常堆栈, 不改业务返回值.
 
     Args:
-        node_name (str): 节点名称，用于日志标识。
+        node_name: 节点名, 来自 node_constants.
 
     Returns:
-        Callable: 装饰器。
+        Callable: 装饰器.
     """
 
     def deco(func):
+        # 位置绑定被装饰节点, 而不是 wrapper 或 langgraph 调用方
+        file_name, real_name, def_line = _resolve_call_site(func)
+
+        def position_patcher(record: dict) -> None:
+            record.update(name=file_name, function=real_name, line=def_line)
+
+        target_logger = _base_logger.patch(position_patcher)
+
         @wraps(func)
         def wrapper(state, *args, **kwargs):
-            # 解析追踪 ID，用于串联同一次请求下的各节点日志
             trace_id = _trace_id(state)
             start_ts = time.time()
-            logger.info(f"[{node_name}] 节点开始，追踪ID={trace_id}")
+            target_logger.info(f"[节点] {node_name} 开始 | task_id={trace_id}")
             try:
                 result = func(state, *args, **kwargs)
-                # 计算节点耗时毫秒，用于性能观测
-                cost_ms = int((time.time() - start_ts) * 1000)
-                logger.info(f"[{node_name}] 节点完成，追踪ID={trace_id}，耗时={cost_ms}ms")
-                return result
             except Exception:
-                # 记录完整堆栈后原样抛出，保持上层异常处理语义
-                logger.exception(f"[{node_name}] 节点异常，追踪ID={trace_id}")
+                cost_ms = int((time.time() - start_ts) * 1000)
+                target_logger.exception(
+                    f"[节点] {node_name} 异常 | task_id={trace_id} | 耗时={cost_ms}ms"
+                )
                 raise
+            cost_ms = int((time.time() - start_ts) * 1000)
+            target_logger.info(f"[节点] {node_name} 完成 | task_id={trace_id} | 耗时={cost_ms}ms")
+            return result
 
         return wrapper
 
@@ -206,33 +215,37 @@ def node_log(node_name: str):
 
 def step_log(step_name: str):
     """
-    步骤日志装饰器，适用于任意普通函数。
-
-    自动记录步骤开始、步骤完成及耗时；发生异常时记录完整堆栈后重新抛出，
-    不吞异常，保持原有业务语义。
+    步骤日志装饰器, 适用于任意普通函数.
 
     Args:
-        step_name (str): 步骤名称，用于日志标识。
+        step_name: 步骤名, 用于日志标识.
 
     Returns:
-        Callable: 装饰器。
+        Callable: 装饰器.
     """
 
     def deco(func):
+        # 位置绑定被装饰函数, 而不是 wrapper 或调用方
+        file_name, real_name, def_line = _resolve_call_site(func)
+
+        def position_patcher(record: dict) -> None:
+            record.update(name=file_name, function=real_name, line=def_line)
+
+        target_logger = _base_logger.patch(position_patcher)
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             start_ts = time.time()
-            logger.info(f"[{step_name}] 步骤开始")
+            target_logger.info(f"[步骤] {step_name} 开始")
             try:
                 result = func(*args, **kwargs)
-                # 计算步骤耗时毫秒，用于性能观测
-                cost_ms = int((time.time() - start_ts) * 1000)
-                logger.info(f"[{step_name}] 步骤完成，耗时={cost_ms}ms")
-                return result
             except Exception:
-                # 记录完整堆栈后原样抛出，保持上层异常处理语义
-                logger.exception(f"[{step_name}] 步骤异常")
+                cost_ms = int((time.time() - start_ts) * 1000)
+                target_logger.exception(f"[步骤] {step_name} 异常 | 耗时={cost_ms}ms")
                 raise
+            cost_ms = int((time.time() - start_ts) * 1000)
+            target_logger.info(f"[步骤] {step_name} 完成 | 耗时={cost_ms}ms")
+            return result
 
         return wrapper
 
@@ -242,7 +255,7 @@ def step_log(step_name: str):
 # ---------------------------------------------------------------------------
 # 函数调用日志装饰器
 # ---------------------------------------------------------------------------
-# 敏感参数关键词：命中即脱敏
+# 命中即脱敏的参数关键字
 _SENSITIVE_KEYWORDS = (
     "password", "passwd", "pwd", "token", "secret", "api_key", "apikey",
     "access_key", "private_key", "authorization", "cookie", "credential",
@@ -253,11 +266,11 @@ _MAX_ITEMS = 10
 
 def _is_sensitive(name: str) -> bool:
     lowered = name.lower()
-    return any(k in lowered for k in _SENSITIVE_KEYWORDS)
+    return any(keyword in lowered for keyword in _SENSITIVE_KEYWORDS)
 
 
 def _safe_repr(value: Any, max_len: int = _MAX_VALUE_LEN) -> str:
-    """安全、可读、截断地表示任意对象，绝不因 __repr__ 抛错而拖垮业务。"""
+    """安全 可读 截断地表示对象, 不因 __repr__ 抛错拖垮业务."""
     try:
         if isinstance(value, str):
             return value if len(value) <= max_len else f"{value[:max_len]}...<len={len(value)}>"
@@ -282,7 +295,7 @@ def _safe_repr(value: Any, max_len: int = _MAX_VALUE_LEN) -> str:
 
 
 def _format_params(func: Callable, args: tuple, kwargs: dict) -> str:
-    """把实参按 name=value 整理，覆盖位置参数 / 关键字 / 默认值 / *args / **kwargs。"""
+    """按 name=value 整理实参, 覆盖位置 关键字 默认值与可变参数."""
     try:
         sig = inspect.signature(func)
         bound = sig.bind_partial(*args, **kwargs)
@@ -293,7 +306,7 @@ def _format_params(func: Callable, args: tuple, kwargs: dict) -> str:
     parts: list[str] = []
     for name, value in bound.arguments.items():
         param = sig.parameters.get(name)
-        # 跳过未传入且为空的 *args / **kwargs，避免日志噪音
+        # *args 与 **kwargs 为空时不打印, 减少噪音
         if (
             param is not None
             and param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
@@ -305,17 +318,19 @@ def _format_params(func: Callable, args: tuple, kwargs: dict) -> str:
 
 
 def _format_return(value: Any, return_names: list[str] | None = None) -> str:
-    """把返回值整理为可读文本；无返回值时明确标注。"""
+    """把返回值整理为可读文本, 无返回值时明确标注."""
     if value is None:
         return "无返回值"
     if isinstance(value, (tuple, list)):
         if not value:
-            return "无返回值（空容器）"
+            return "无返回值, 空容器"
         if return_names and len(return_names) == len(value):
-            return ", ".join(f"{n}={_safe_repr(v)}" for n, v in zip(return_names, value))
+            return ", ".join(f"{name}={_safe_repr(v)}" for name, v in zip(return_names, value))
         if len(value) <= _MAX_ITEMS:
             return ", ".join(f"result[{i}]={_safe_repr(v)}" for i, v in enumerate(value))
-        preview = ", ".join(f"result[{i}]={_safe_repr(v)}" for i, v in enumerate(value[:_MAX_ITEMS]))
+        preview = ", ".join(
+            f"result[{i}]={_safe_repr(v)}" for i, v in enumerate(value[:_MAX_ITEMS])
+        )
         return f"{preview}, ... <total={len(value)}>"
     if isinstance(value, dict):
         items = list(value.items())
@@ -326,23 +341,6 @@ def _format_return(value: Any, return_names: list[str] | None = None) -> str:
     return f"result={_safe_repr(value)}"
 
 
-def _resolve_call_site(target: Callable) -> tuple[str, str, int]:
-    """解析被装饰函数自身的 (py 文件名, 函数名, def 行号)，作为日志中的位置字段。"""
-    try:
-        source_file = inspect.getsourcefile(target)
-        file_name = Path(source_file).name if source_file else "<unknown>"
-    except (TypeError, OSError):
-        file_name = "<unknown>"
-    try:
-        lines, start = inspect.getsourcelines(target)
-        for offset, line in enumerate(lines):
-            if line.lstrip().startswith(("def ", "async def ")):
-                return file_name, target.__name__, start + offset
-        return file_name, target.__name__, start
-    except (TypeError, OSError):
-        return file_name, target.__name__, target.__code__.co_firstlineno
-
-
 def function_log(
     func: Callable | None = None,
     *,
@@ -350,16 +348,19 @@ def function_log(
     return_names: list[str] | None = None,
 ):
     """
-    通用函数调用日志装饰器，同步/异步函数均适用。
+    函数调用日志装饰器, 同步与异步函数均适用.
 
-    日志位置（name/function/line）绑定被装饰函数自身，而非 wrapper 或调用方；
-    开始记录参数名=参数值，完成记录返回值（无返回值时明确标注），异常记录堆栈
-    并原样抛出。支持 @function_log 与 @function_log(...) 两种写法。
+    开始记参数, 完成记返回值与耗时, 异常记堆栈并原样抛出.
+    日志位置绑定被装饰函数, 而不是 wrapper 或调用方.
+    支持 @function_log 与 @function_log(...) 两种写法.
 
     Args:
-        func: 被装饰函数，@function_log 裸用时自动传入。
-        func_name: 日志业务名，缺省用真实函数名。
-        return_names: tuple/list 返回值逐项命名，如 ["pdf_path_obj", "local_dir_obj"]。
+        func: 被装饰函数, 裸用时自动传入.
+        func_name: 日志业务名, 缺省用真实函数名.
+        return_names: 多返回值逐项命名, 如 ["md_path", "md_content"].
+
+    Returns:
+        Callable: 装饰后的函数, 或装饰器.
     """
 
     def deco(target: Callable):
@@ -369,44 +370,45 @@ def function_log(
         def position_patcher(record: dict) -> None:
             record.update(name=file_name, function=real_name, line=def_line)
 
-        # 关键：用 base_logger 绕过 fix_log_position 的栈遍历，位置直接绑定被装饰函数
-        target_logger = base_logger.patch(position_patcher)
+        # 用 _base_logger 绕过栈遍历, 位置直接绑定被装饰函数
+        target_logger = _base_logger.patch(position_patcher)
 
         if inspect.iscoroutinefunction(target):
             @wraps(target)
             async def async_wrapper(*args, **kwargs):
                 params_text = _format_params(target, args, kwargs)
                 start_ts = time.time()
-                target_logger.info(f"[{log_name}] 开始执行 | 参数: {params_text}")
+                target_logger.info(f"[提示] {log_name} 开始 | {params_text}")
                 try:
                     result = await target(*args, **kwargs)
-                    cost_ms = int((time.time() - start_ts) * 1000)
-                    target_logger.info(
-                        f"[{log_name}] 执行完毕 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
-                    )
-                    return result
                 except Exception:
                     cost_ms = int((time.time() - start_ts) * 1000)
-                    target_logger.exception(f"[{log_name}] 执行异常 | 耗时={cost_ms}ms")
+                    target_logger.exception(f"[异常] {log_name} 异常 | 耗时={cost_ms}ms")
                     raise
+                cost_ms = int((time.time() - start_ts) * 1000)
+                target_logger.info(
+                    f"[提示] {log_name} 完成 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
+                )
+                return result
+
             return async_wrapper
 
         @wraps(target)
         def sync_wrapper(*args, **kwargs):
             params_text = _format_params(target, args, kwargs)
             start_ts = time.time()
-            target_logger.info(f"[{log_name}] 开始执行 | 参数: {params_text}")
+            target_logger.info(f"[提示] {log_name} 开始 | {params_text}")
             try:
                 result = target(*args, **kwargs)
-                cost_ms = int((time.time() - start_ts) * 1000)
-                target_logger.info(
-                    f"[{log_name}] 执行完毕 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
-                )
-                return result
             except Exception:
                 cost_ms = int((time.time() - start_ts) * 1000)
-                target_logger.exception(f"[{log_name}] 执行异常 | 耗时={cost_ms}ms")
+                target_logger.exception(f"[异常] {log_name} 异常 | 耗时={cost_ms}ms")
                 raise
+            cost_ms = int((time.time() - start_ts) * 1000)
+            target_logger.info(
+                f"[提示] {log_name} 完成 | {_format_return(result, return_names)} | 耗时={cost_ms}ms"
+            )
+            return result
 
         return sync_wrapper
 

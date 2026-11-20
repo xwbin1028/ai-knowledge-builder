@@ -1,32 +1,27 @@
 """
-图节点：向量库导入节点。
+节点: 向量入库.
 
-调用入库服务，将已生成向量的切片数据批量写入 Milvus 数据库，
-并在执行前后更新任务追踪状态与结构化日志。
+读取 state 的 chunks 与 embeddings, 写入 Milvus, 回写 chunk_id.
 """
-from app.shared.runtime.logger import node_log
-from app.shared.utils.task_utils import add_running_task, add_done_task
+from app.constants.node_constants import NODE_IMPORT_MILVUS
 from app.process.import_.agent.state import ImportGraphState
 from app.rag.import_.index_service import index_chunks
+from app.shared.runtime.logger import node_log
+from app.shared.utils.task_utils import add_done_task, add_running_task
 
 
-# ---------------------------------------------------------------------------
-# 节点定义
-# ---------------------------------------------------------------------------
-@node_log("node_import_milvus")
+@node_log(NODE_IMPORT_MILVUS)
 def node_import_milvus(state: ImportGraphState) -> ImportGraphState:
     """
-    节点：导入向量库。
-
-    核心任务：将处理好的向量数据写入 Milvus 数据库。
+    节点: 向量入库.
 
     Args:
-        state (ImportGraphState): 图全局状态。
+        state: 图全局状态.
 
     Returns:
-        ImportGraphState: 更新后的图全局状态。
+        ImportGraphState: 已写入入库结果的状态.
     """
-    add_running_task(state["task_id"], "node_import_milvus")
+    add_running_task(state["task_id"], NODE_IMPORT_MILVUS)
     state = index_chunks(state)
-    add_done_task(state["task_id"], "node_import_milvus")
+    add_done_task(state["task_id"], NODE_IMPORT_MILVUS)
     return state

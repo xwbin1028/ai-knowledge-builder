@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 项目本地产物 (不提交)
+output/
+logs/
+doc/

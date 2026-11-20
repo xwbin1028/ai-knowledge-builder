@@ -1,25 +1,25 @@
 """
-向量化服务模块。
+向量化服务.
 
-纯函数服务，读取文档切片并调用 BGE-M3 模型生成稠密与稀疏向量，
-将向量结果补充回切片数据中，为后续混合检索提供基础。
+读取 chunks, 调 BGE-M3 生成稠密与稀疏向量, 回写 embeddings.
 """
 from app.process.import_.agent.state import ImportGraphState
+from app.shared.runtime.logger import logger
 
 
 def generate_chunk_embeddings(state: ImportGraphState) -> ImportGraphState:
     """
-    向量化服务。
+    生成切片向量.
 
-    执行步骤：
-        1. 读取 chunks。
-        2. 生成 dense_vector 与 sparse_vector。
-        3. 将向量结果补充回 chunks。
+    待实现: 读取 chunks -> BGE-M3 生成 dense 与 sparse -> 回写 embeddings.
 
     Args:
-        state (ImportGraphState): 图全局状态。
+        state: 图全局状态.
 
     Returns:
-        ImportGraphState: 更新后的图全局状态。
+        ImportGraphState: 原样返回, 当前未实现.
     """
+    # TODO: 待实现, 需要加载本地 BGE-M3 模型
+    task_id: str = state.get("task_id", "")
+    logger.warning(f"[警告] task_id={task_id} | 向量化未实现, 跳过")
     return state

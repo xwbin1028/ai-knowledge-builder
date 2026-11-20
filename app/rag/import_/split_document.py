@@ -1,26 +1,25 @@
 """
-文档切分服务模块。
+文档切分服务.
 
-纯函数服务，按标题层级与语义边界将长文档切分为适合检索的文本块，
-构造 chunk 列表并回写到图状态中。
+按标题层级与长度把 md 正文切分为检索友好的 chunks.
 """
 from app.process.import_.agent.state import ImportGraphState
+from app.shared.runtime.logger import logger
 
 
 def split_document(state: ImportGraphState) -> ImportGraphState:
     """
-    文档切分服务。
+    切分文档.
 
-    执行步骤：
-        1. 按标题层级做一级粗切。
-        2. 对超长文本做二次细切。
-        3. 构造 chunks 列表。
-        4. 回写 chunks。
+    待实现: 标题粗切 -> 超长细切 -> 构造 chunks -> 回写 state.
 
     Args:
-        state (ImportGraphState): 图全局状态。
+        state: 图全局状态.
 
     Returns:
-        ImportGraphState: 更新后的图全局状态。
+        ImportGraphState: 原样返回, 当前未实现.
     """
+    # TODO: 待实现, 需要切分参数与标题规则
+    task_id: str = state.get("task_id", "")
+    logger.warning(f"[警告] task_id={task_id} | 文档切分未实现, 跳过")
     return state

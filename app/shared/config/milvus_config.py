@@ -1,37 +1,23 @@
 """
-Milvus 配置模块。
+Milvus 向量库配置.
 
-负责从环境变量中读取向量数据库 Milvus 的连接地址与集合名称，
-并将其封装为强类型的全局单例实例 milvus_config，供 RAG 与检索业务直接调用。
+从 .env 读取连接地址与三个集合名, 装配为全局单例 milvus_config.
 """
 from dataclasses import dataclass
+
 from app.shared.config.common import env_str
 
 
-# ---------------------------------------------------------------------------
-# 配置模型定义
-# ---------------------------------------------------------------------------
 @dataclass
 class MilvusConfig:
-    """
-    Milvus 向量数据库配置项的数据类。
+    """Milvus 连接与集合配置项."""
 
-    Attributes:
-        milvus_url (str): Milvus 服务的连接地址 http://localhost:19530
-        chunks_collection (str): 存放文档切块 Chunks 向量数据的集合名称。
-        entity_name_collection (str): 存放实体名称 Entity Name 向量数据的集合名称。
-        item_name_collection (str): 存放物品名称 item_name 向量数据的集合名称。
-    """
-    milvus_url: str
-    chunks_collection: str
-    entity_name_collection: str
-    item_name_collection: str
+    milvus_url: str              # 连接地址, 例 http://localhost:19530
+    chunks_collection: str       # 文本切片集合
+    entity_name_collection: str  # 实体名称集合
+    item_name_collection: str    # 商品名称集合
 
 
-# ---------------------------------------------------------------------------
-# 全局实例化
-# ---------------------------------------------------------------------------
-# 使用 common.py 全局环境变量工具封装简化代码
 milvus_config = MilvusConfig(
     milvus_url=env_str("MILVUS_URL"),
     chunks_collection=env_str("CHUNKS_COLLECTION"),

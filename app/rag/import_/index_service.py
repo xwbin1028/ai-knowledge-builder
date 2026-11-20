@@ -1,26 +1,25 @@
 """
-入库服务模块。
+Milvus 入库服务.
 
-纯函数服务，负责 Milvus 集合的 Schema 准备、旧数据清理与批量插入，
-将向量化后的切片数据持久化到向量数据库。
+准备集合与索引, 按 item_name 清理旧数据, 批量写入切片并回写 chunk_id.
 """
 from app.process.import_.agent.state import ImportGraphState
+from app.shared.runtime.logger import logger
 
 
 def index_chunks(state: ImportGraphState) -> ImportGraphState:
     """
-    入库服务。
+    写入向量库.
 
-    执行步骤：
-        1. 准备集合 Schema 和索引。
-        2. 根据 item_name 删除旧数据。
-        3. 批量插入新的 chunks。
-        4. 回写 chunk_id 等入库结果。
+    待实现: 准备集合 -> 按 item_name 删旧 -> 批量插入 -> 回写 chunk_id.
 
     Args:
-        state (ImportGraphState): 图全局状态。
+        state: 图全局状态.
 
     Returns:
-        ImportGraphState: 更新后的图全局状态。
+        ImportGraphState: 原样返回, 当前未实现.
     """
+    # TODO: 待实现, 需要 Milvus 连接与集合 Schema
+    task_id: str = state.get("task_id", "")
+    logger.warning(f"[警告] task_id={task_id} | 向量入库未实现, 跳过")
     return state

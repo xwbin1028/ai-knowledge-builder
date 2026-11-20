@@ -1,173 +1,164 @@
 """
-SSE 流式通信工具模块。
+SSE 流式通信.
 
-基于 FastAPI StreamingResponse 与内存队列实现 Server-Sent Events。
-为每个会话维护独立的阻塞队列，通过线程池适配异步事件循环，
-支持进度推送、LLM 增量输出与断连检测。
+按 session_id 维护内存队列, 通过 FastAPI StreamingResponse 推送进度与增量.
 """
+import asyncio
 import json
 import queue
-import asyncio
-from typing import Dict, Any, Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+from enum import Enum
+from typing import Any
+
 from fastapi import Request
 
+from app.shared.runtime.logger import logger
+
+
+class SSEEvent(str, Enum):
+    """SSE 事件名, 与前端约定一致."""
+
+    READY = "ready"
+    PROGRESS = "progress"
+    DELTA = "delta"
+    FINAL = "final"
+    ERROR = "error"
+    CLOSE = "__close__"
+
+
+# key: session_id, value: 线程安全队列
+_session_stream: dict[str, queue.Queue] = {}
+
 
 # ---------------------------------------------------------------------------
-# SSE 事件类型常量
+# 队列生命周期
 # ---------------------------------------------------------------------------
-class SSEEvent:
+def get_sse_queue(session_id: str) -> queue.Queue | None:
     """
-    SSE 支持的事件类型枚举。
-    """
-    READY = "ready"         # 连接建立
-    PROGRESS = "progress"   # 任务节点进度
-    DELTA = "delta"         # LLM 流式输出增量
-    FINAL = "final"         # 最终完整答案
-    ERROR = "error"         # 错误信息
-    CLOSE = "__close__"     # 关闭连接信号
-
-
-# 全局 SSE 会话队列存储
-# Key: session_id, Value: queue.Queue
-_session_stream: Dict[str, queue.Queue] = {}
-
-
-# ---------------------------------------------------------------------------
-# 队列生命周期管理
-# ---------------------------------------------------------------------------
-def get_sse_queue(session_id: str) -> Optional["queue.Queue"]:
-    """
-    获取指定 session 的队列，不存在时返回 None。
+    获取会话队列.
 
     Args:
-        session_id (str): 会话唯一标识。
+        session_id: 会话 ID.
 
     Returns:
-        Optional[queue.Queue]: 对应的队列对象，若不存在则返回 None。
+        queue.Queue | None: 队列不存在时返回 None.
     """
     return _session_stream.get(session_id)
 
 
-def create_sse_queue(session_id: str) -> "queue.Queue":
+def create_sse_queue(session_id: str) -> queue.Queue:
     """
-    创建并注册一个新的 SSE 队列。
+    创建并注册会话队列.
 
     Args:
-        session_id (str): 会话唯一标识。
+        session_id: 会话 ID.
 
     Returns:
-        queue.Queue: 新创建的线程安全队列实例。
+        queue.Queue: 新队列.
     """
-    print(f"[SSE] Creating queue for session: {session_id}")
-    q = queue.Queue()
-    _session_stream[session_id] = q
-    return q
+    logger.info(f"[提示] session_id={session_id} | 创建 SSE 队列")
+    session_queue: queue.Queue = queue.Queue()
+    _session_stream[session_id] = session_queue
+    return session_queue
 
 
 def remove_sse_queue(session_id: str) -> None:
     """
-    移除指定 session 的队列，释放内存。
+    移除会话队列并释放内存.
 
     Args:
-        session_id (str): 会话唯一标识。
+        session_id: 会话 ID.
     """
-    print(f"[SSE] Removing queue for session: {session_id}")
+    logger.info(f"[提示] session_id={session_id} | 移除 SSE 队列")
     _session_stream.pop(session_id, None)
 
 
 # ---------------------------------------------------------------------------
 # 消息推送
 # ---------------------------------------------------------------------------
-def _sse_pack(event: str, data: Dict[str, Any]) -> str:
+def _sse_pack(event: str, data: dict[str, Any]) -> str:
     """
-    将事件与数据打包为 SSE 标准报文格式。
+    打包为 SSE 报文.
 
     Args:
-        event (str): 事件类型名称，如 ready 或 progress。
-        data (Dict[str, Any]): 需要推送给前端的业务数据字典。
+        event: 事件名.
+        data: 业务数据.
 
     Returns:
-        str: 符合 SSE 协议规范的多行字符串报文。
+        str: event 与 data 两行加空行.
     """
     payload = json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def push_to_session(session_id: str, event: str, data: Dict[str, Any]) -> None:
+def push_to_session(session_id: str, event: str, data: dict[str, Any]) -> None:
     """
-    通过 session_id 将事件推送到对应的队列。
+    向会话队列推送事件.
 
     Args:
-        session_id (str): 会话标识。
-        event (str): 事件类型，参考 SSEEvent 常量。
-        data (Dict[str, Any]): 事件负载数据。
+        session_id: 会话 ID.
+        event: 事件名, 参考 SSEEvent.
+        data: 事件负载.
     """
-    stream_queue = get_sse_queue(session_id)
-    if stream_queue:
-        stream_queue.put({"event": event, "data": data})
-    else:
-        print(f"[SSE] Warning: No queue found for session {session_id} when pushing {event}")
+    session_queue = get_sse_queue(session_id)
+    if session_queue is None:
+        logger.warning(f"[警告] session_id={session_id} | 队列不存在, 丢弃事件 | event={event}")
+        return
+    session_queue.put({"event": event, "data": data})
 
 
 # ---------------------------------------------------------------------------
-# SSE 生成器 (FastAPI StreamingResponse 入口)
+# SSE 生成器
 # ---------------------------------------------------------------------------
-async def sse_generator(session_id: str, request: Request):
+async def sse_generator(session_id: str, request: Request) -> AsyncGenerator[str, None]:
     """
-    SSE 生成器，用于 FastAPI 的 StreamingResponse。
+    SSE 生成器, 供 StreamingResponse 使用.
 
-    持续从会话队列拉取事件并 yield 给客户端，同时轮询客户端连接状态，
-    在断连或收到 __close__ 信号时清理资源并退出。
+    持续拉取队列事件, 客户端断开或收到关闭信号时清理队列.
 
     Args:
-        session_id (str): 会话标识。
-        request (Request): FastAPI 的请求对象，用于检测客户端断连。
+        session_id: 会话 ID.
+        request: FastAPI 请求对象, 用于检测断连.
 
     Yields:
-        str: 格式化后的 SSE 报文数据块。
+        str: SSE 报文.
     """
-    print(f"[SSE] Generator started for session: {session_id}")
-    stream_queue = get_sse_queue(session_id)
-    if stream_queue is None:
-        print(f"[SSE] Error: Queue not found for session {session_id}. Available sessions: {list(_session_stream.keys())}")
+    logger.info(f"[提示] session_id={session_id} | SSE 生成器启动")
+    session_queue = get_sse_queue(session_id)
+    if session_queue is None:
+        logger.warning(f"[警告] session_id={session_id} | 队列不存在, 无法推送")
         return
 
     loop = asyncio.get_running_loop()
     try:
-        # 发送连接建立信号
-        print(f"[SSE] Sending ready signal for {session_id}")
-        yield _sse_pack("ready", {})
+        # 连接建立先发 ready
+        yield _sse_pack(SSEEvent.READY.value, {})
 
         while True:
-            # 若客户端断开，尽快退出
+            # 客户端断开则尽快退出
             if await request.is_disconnected():
-                print(f"[SSE] Client disconnected: {session_id}")
-                print("-----------------------断开连接--------------------")
+                logger.info(f"[提示] session_id={session_id} | 客户端断开")
                 break
 
             try:
-                # 使用 run_in_executor 避免阻塞 async 事件循环
-                # 传入阻塞的 queue.get 及超时时间 1.0 秒
-                msg = await loop.run_in_executor(None, stream_queue.get, True, 1.0)
+                # 阻塞取队列放到线程池, 避免卡住事件循环
+                msg = await loop.run_in_executor(None, session_queue.get, True, 1.0)
             except queue.Empty:
                 continue
 
             event = msg.get("event")
             data = msg.get("data")
 
-            # 特殊关闭事件
-            if event == "__close__":
-                print(f"[SSE] Closing signal received for {session_id}")
+            if event == SSEEvent.CLOSE.value:
+                logger.info(f"[提示] session_id={session_id} | 收到关闭信号")
                 break
 
             yield _sse_pack(event, data)
     except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
-        print(f"[SSE] Client disconnected (Cancelled/Reset/Pipe): {session_id}")
-        # 生成器被取消/对端断开：静默退出
+        logger.info(f"[提示] session_id={session_id} | 连接取消或对端断开")
         return
-    except Exception as e:
-        print(f"[SSE] Exception in generator for {session_id}: {e}")
+    except Exception:
+        logger.exception(f"[异常] session_id={session_id} | SSE 推送异常")
     finally:
-        print(f"[SSE] Generator finished for {session_id}")
-        # 清理资源
+        logger.info(f"[提示] session_id={session_id} | SSE 生成器结束")
         remove_sse_queue(session_id)
