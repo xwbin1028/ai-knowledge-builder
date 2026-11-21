@@ -8,8 +8,8 @@
 - `app/rag/import_`: 导入侧服务
 - `app/shared`: 日志 配置 SSE 任务追踪
 - `app/infra`: 配置聚合, 模型 provider 与 MinIO 网关
-- `notes/`: 编码规范, 先读 notes/README.md
-- `test/`: 手动测试脚本
+- `notes/`: 本项目技术知识清单 (本机使用, 已在 `.gitignore` 忽略)
+- `test/`: 本地手动测试脚本 (已在 `.gitignore` 忽略)
 
 ## 运行
 
