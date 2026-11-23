@@ -26,6 +26,9 @@ PREAMBLE_TITLE: Final[str] = "前言"
 # 切分备份文件名后缀, 与 Markdown 放在同一目录
 CHUNKS_JSON_SUFFIX: Final[str] = "_chunks.json"
 
+# 旧版备份文件名, 读取时兼容
+LEGACY_CHUNKS_JSON_NAME: Final[str] = "chunks.json"
+
 # 递归切割器的分隔符, 从段落 行 逐级退化到中文句读
 SPLIT_SEPARATORS: Final[tuple[str, ...]] = ("\n\n", "\n", "。", "！", "？", "；")
 
