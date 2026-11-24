@@ -21,7 +21,7 @@ class ImportGraphState(TypedDict):
     item_name: str                      # 主体名称
     file_title: str                     # 文件标题
     chunks: list[dict[str, Any]]        # 文本切片
-    embeddings: list[dict[str, Any]]    # 向量结果
+    embeddings_content: list[dict[str, Any]]  # 带向量的切片
 
 
 GRAPH_DEFAULT_STATE: ImportGraphState = {
@@ -36,7 +36,7 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
     "item_name": "",
     "file_title": "",
     "chunks": [],
-    "embeddings": [],
+    "embeddings_content": [],
 }
 
 

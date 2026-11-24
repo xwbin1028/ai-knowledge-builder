@@ -1,7 +1,7 @@
 """
 节点: BGE-M3 向量化.
 
-读取 state 的 chunks, 生成稠密与稀疏向量, 回写 embeddings.
+读取 state 的 chunks, 生成稠密与稀疏向量, 回写 embeddings_content.
 """
 from app.constants.node_constants import NODE_BGE_EMBEDDING
 from app.process.import_.agent.state import ImportGraphState
@@ -19,7 +19,7 @@ def node_bge_embedding(state: ImportGraphState) -> ImportGraphState:
         state: 图全局状态.
 
     Returns:
-        ImportGraphState: 已写入 embeddings 的状态.
+        ImportGraphState: 已写入 embeddings_content 的状态.
     """
     add_running_task(state["task_id"], NODE_BGE_EMBEDDING)
     state = generate_chunk_embeddings(state)

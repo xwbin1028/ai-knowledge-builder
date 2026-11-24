@@ -1,7 +1,7 @@
 """
 节点: 向量入库.
 
-读取 state 的 chunks 与 embeddings, 写入 Milvus, 回写 chunk_id.
+读取 state 的 chunks 与 embeddings_content, 写入 Milvus, 回写 chunk_id.
 """
 from app.constants.node_constants import NODE_IMPORT_MILVUS
 from app.process.import_.agent.state import ImportGraphState
